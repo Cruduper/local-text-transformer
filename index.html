@@ -1,0 +1,542 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Local Text Transformer</title>
+  <link rel="stylesheet" href="./styles.css">
+  </head>
+<body>
+  <main>
+    <h1>Local Text Transformer</h1>
+
+    <p class="subtitle">
+      Choose a transformation, paste text, and copy the result. Built-in transforms are local
+      JavaScript files; custom transforms are stored only in this browser.
+    </p>
+
+    <section class="toolbar" aria-label="Transformation controls">
+      <div class="toolbar-row">
+        <div class="field">
+          <label for="transformSelect">Transformation</label>
+          <select id="transformSelect"></select>
+        </div>
+
+        <button id="helpTransformBtn" type="button" disabled>
+          Help
+        </button>
+
+        <button id="deleteTransformBtn" class="danger" type="button" disabled>
+          Delete selected custom transform
+        </button>
+      </div>
+
+      <div class="below-select">
+        <button id="addTransformBtn" type="button">
+          Add custom transform
+        </button>
+      </div>
+
+      <p class="status" id="status" aria-live="polite"></p>
+    </section>
+
+    <section class="stack">
+      <div class="panel">
+        <div class="panel-header">
+          <label for="input">Raw text</label>
+          <button id="clearBtn" type="button">Clear</button>
+        </div>
+
+        <textarea
+          id="input"
+          spellcheck="false"
+          placeholder="Paste source text here..."
+        ></textarea>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <label for="output">Formatted result</label>
+          <button id="copyBtn" class="primary" type="button">Copy result</button>
+        </div>
+
+        <textarea
+          id="output"
+          spellcheck="false"
+          readonly
+          placeholder="Transformed output appears here..."
+        ></textarea>
+      </div>
+    </section>
+  </main>
+
+  <div
+    class="modal"
+    id="transformModal"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="transformModalTitle"
+  >
+    <div class="modal-card">
+      <h2 id="transformModalTitle">Add custom transform</h2>
+
+      <form id="transformForm" class="modal-grid">
+        <div class="field-row">
+          <div class="field">
+            <label for="transformInputName">Input name</label>
+            <input
+              id="transformInputName"
+              maxlength="80"
+              required
+              placeholder="Example: Parfumo Notes"
+            >
+          </div>
+
+          <div class="field">
+            <label for="transformOutputName">Output name</label>
+            <input
+              id="transformOutputName"
+              maxlength="80"
+              placeholder="Example: Mercari"
+            >
+          </div>
+        </div>
+
+        <p class="help">
+          If both fields are filled, the saved name becomes
+          <code>Input ⟶ Output</code>. If only the first field is filled, that first field
+          is used as the whole transformer name.
+        </p>
+
+        <div class="field">
+          <label for="customHelpText">Help text</label>
+          <textarea
+            id="customHelpText"
+            spellcheck="false"
+            placeholder="Optional notes for this transform..."
+          ></textarea>
+        </div>
+
+        <div class="field">
+          <label for="transformCode">Function body</label>
+          <textarea id="transformCode" spellcheck="false" required>function transform(text) {
+  return text;
+}</textarea>
+
+          <p class="help">
+            Define one function named <code>transform</code>. It receives a string and
+            must return a string.
+          </p>
+        </div>
+
+        <div class="modal-actions">
+          <button class="primary" type="submit">Save transform</button>
+          <button id="cancelTransformModalBtn" type="button">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div
+    class="modal"
+    id="helpModal"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="helpModalTitle"
+  >
+    <div class="modal-card">
+      <h2 id="helpModalTitle">Transform help</h2>
+
+      <pre id="helpTextOutput"></pre>
+
+      <div class="modal-actions">
+        <button id="closeHelpModalBtn" class="primary" type="button">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    window.TextTransformer = {
+      builtIns: [],
+
+      registerBuiltIn(definition) {
+        if (
+          !definition ||
+          typeof definition.id !== "string" ||
+          typeof definition.name !== "string" ||
+          typeof definition.transform !== "function"
+        ) {
+          throw new TypeError(
+            "A built-in transform requires string id, string name, and transform function."
+          );
+        }
+
+        this.builtIns.push({
+          id: definition.id,
+          name: definition.name,
+          helpText: definition.helpText,
+          transform: definition.transform,
+          type: "built-in"
+        });
+      }
+    };
+  </script>
+
+  <!-- Add built-in transforms here. Each file should call TextTransformer.registerBuiltIn(). -->
+  <script src="./transforms/fragrantica-notes-to-obsidian.js"></script>
+  <script src="./transforms/fragrantica-notes-to-mercari.js"></script>
+  <script src="./transforms/parfumo-notes-to-obsidian.js"></script>
+  <script src="./transforms/parfumo-notes-to-mercari.js"></script>
+
+  <script>
+    const STORAGE_KEY = "local-text-transformer.custom-transforms.v2";
+
+    const transformSelect = document.getElementById("transformSelect");
+    const helpTransformBtn = document.getElementById("helpTransformBtn");
+    const deleteTransformBtn = document.getElementById("deleteTransformBtn");
+    const addTransformBtn = document.getElementById("addTransformBtn");
+
+    const input = document.getElementById("input");
+    const output = document.getElementById("output");
+    const copyBtn = document.getElementById("copyBtn");
+    const clearBtn = document.getElementById("clearBtn");
+    const status = document.getElementById("status");
+
+    const transformModal = document.getElementById("transformModal");
+    const transformForm = document.getElementById("transformForm");
+    const transformInputName = document.getElementById("transformInputName");
+    const transformOutputName = document.getElementById("transformOutputName");
+    const customHelpText = document.getElementById("customHelpText");
+    const transformCode = document.getElementById("transformCode");
+    const cancelTransformModalBtn = document.getElementById("cancelTransformModalBtn");
+
+    const helpModal = document.getElementById("helpModal");
+    const helpTextOutput = document.getElementById("helpTextOutput");
+    const closeHelpModalBtn = document.getElementById("closeHelpModalBtn");
+
+    let customTransforms = loadCustomTransforms();
+
+    function loadCustomTransforms() {
+      try {
+        const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
+    }
+
+    function saveCustomTransforms() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(customTransforms));
+    }
+
+    function setStatus(message, isError = false) {
+      status.textContent = message;
+      status.classList.toggle("error", isError);
+    }
+
+    function buildTransformName(inputName, outputName) {
+      const cleanInputName = inputName.trim();
+      const cleanOutputName = outputName.trim();
+
+      if (cleanInputName && cleanOutputName) {
+        return `${cleanInputName} ⟶ ${cleanOutputName}`;
+      }
+
+      return cleanInputName;
+    }
+
+    function getAllTransformDefinitions() {
+      return [
+        ...window.TextTransformer.builtIns,
+        ...customTransforms.map((item) => ({
+          ...item,
+          type: "custom"
+        }))
+      ];
+    }
+
+    function renderTransformOptions(preferredId) {
+      const definitions = getAllTransformDefinitions();
+      const previous = preferredId || transformSelect.value;
+
+      transformSelect.replaceChildren();
+
+      for (const definition of definitions) {
+        const option = document.createElement("option");
+        option.value = `${definition.type}:${definition.id}`;
+        option.textContent =
+          definition.type === "custom"
+            ? `${definition.name} (custom)`
+            : definition.name;
+
+        transformSelect.append(option);
+      }
+
+      const desired = definitions.some(
+        (definition) => `${definition.type}:${definition.id}` === previous
+      )
+        ? previous
+        : transformSelect.options[0]?.value;
+
+      if (desired) {
+        transformSelect.value = desired;
+      }
+
+      updateButtons();
+      runSelectedTransform();
+    }
+
+    function getSelectedDefinition() {
+      const [type, ...idParts] = transformSelect.value.split(":");
+      const id = idParts.join(":");
+
+      if (type === "built-in") {
+        const builtIn = window.TextTransformer.builtIns.find(
+          (item) => String(item.id) === id
+        );
+
+        return builtIn
+          ? { ...builtIn, type: "built-in" }
+          : null;
+      }
+
+      if (type === "custom") {
+        const custom = customTransforms.find(
+          (item) => String(item.id) === id
+        );
+
+        return custom
+          ? { ...custom, type: "custom" }
+          : null;
+      }
+
+      return null;
+    }
+
+    function compileCustomTransform(sourceCode) {
+      const factory = new Function(`
+        "use strict";
+
+        ${sourceCode}
+
+        if (typeof transform !== "function") {
+          throw new TypeError("Custom code must define function transform(text).");
+        }
+
+        return transform;
+      `);
+
+      return factory();
+    }
+
+    function runSelectedTransform() {
+      const definition = getSelectedDefinition();
+
+      if (!definition) {
+        output.value = "";
+        return;
+      }
+
+      try {
+        const transform =
+          definition.type === "custom"
+            ? compileCustomTransform(definition.code)
+            : definition.transform;
+
+        const result = transform(input.value);
+
+        if (typeof result !== "string") {
+          throw new TypeError("The transform must return a string.");
+        }
+
+        output.value = result;
+        setStatus("");
+      } catch (error) {
+        output.value = "";
+        setStatus(`Transform error: ${error.message}`, true);
+      }
+    }
+
+    function updateButtons() {
+      const definition = getSelectedDefinition();
+
+      helpTransformBtn.disabled = !definition;
+      deleteTransformBtn.disabled = !definition || definition.type !== "custom";
+    }
+
+    function openTransformModal() {
+      transformForm.reset();
+
+      transformCode.value = `function transform(text) {
+  return text;
+}`;
+
+      transformModal.classList.add("open");
+      document.body.classList.add("modal-open");
+      transformInputName.focus();
+    }
+
+    function closeTransformModal() {
+      transformModal.classList.remove("open");
+      document.body.classList.remove("modal-open");
+    }
+
+    function openHelpModal() {
+      const definition = getSelectedDefinition();
+
+      if (!definition) {
+        helpTextOutput.textContent = "Help error: no transform is currently selected.";
+      } else if (!Object.prototype.hasOwnProperty.call(definition, "helpText")) {
+        helpTextOutput.textContent =
+          "Help error: this transform does not define a helpText property.";
+      } else if (typeof definition.helpText !== "string") {
+        helpTextOutput.textContent =
+          "Help error: helpText must be a string.";
+      } else if (definition.helpText.trim() === "") {
+        helpTextOutput.textContent =
+          "No help text available for this transform";
+      } else {
+        helpTextOutput.textContent = definition.helpText;
+      }
+
+      helpModal.classList.add("open");
+      document.body.classList.add("modal-open");
+      closeHelpModalBtn.focus();
+    }
+
+    function closeHelpModal() {
+      helpModal.classList.remove("open");
+      document.body.classList.remove("modal-open");
+    }
+
+    input.addEventListener("input", runSelectedTransform);
+
+    transformSelect.addEventListener("change", () => {
+      updateButtons();
+      runSelectedTransform();
+    });
+
+    addTransformBtn.addEventListener("click", openTransformModal);
+    cancelTransformModalBtn.addEventListener("click", closeTransformModal);
+
+    helpTransformBtn.addEventListener("click", openHelpModal);
+    closeHelpModalBtn.addEventListener("click", closeHelpModal);
+
+    transformModal.addEventListener("click", (event) => {
+      if (event.target === transformModal) {
+        closeTransformModal();
+      }
+    });
+
+    helpModal.addEventListener("click", (event) => {
+      if (event.target === helpModal) {
+        closeHelpModal();
+      }
+    });
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape") {
+        return;
+      }
+
+      if (transformModal.classList.contains("open")) {
+        closeTransformModal();
+      }
+
+      if (helpModal.classList.contains("open")) {
+        closeHelpModal();
+      }
+    });
+
+    transformForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+
+      const inputName = transformInputName.value.trim();
+      const outputName = transformOutputName.value.trim();
+      const name = buildTransformName(inputName, outputName);
+      const code = transformCode.value.trim();
+      const helpText = customHelpText.value;
+
+      try {
+        const testTransform = compileCustomTransform(code);
+        const testResult = testTransform("");
+
+        if (typeof testResult !== "string") {
+          throw new TypeError("The transform must return a string.");
+        }
+      } catch (error) {
+        setStatus(`Could not save transform: ${error.message}`, true);
+        return;
+      }
+
+      const id =
+        crypto.randomUUID
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+      customTransforms.push({
+        id,
+        name,
+        inputName,
+        outputName,
+        helpText,
+        code
+      });
+
+      saveCustomTransforms();
+      closeTransformModal();
+      renderTransformOptions(`custom:${id}`);
+      setStatus(`Saved custom transform “${name}”.`);
+    });
+
+    deleteTransformBtn.addEventListener("click", () => {
+      const definition = getSelectedDefinition();
+
+      if (!definition || definition.type !== "custom") {
+        return;
+      }
+
+      const confirmed = confirm(
+        `Delete the custom transform “${definition.name}”?`
+      );
+
+      if (!confirmed) {
+        return;
+      }
+
+      customTransforms = customTransforms.filter(
+        (item) => item.id !== definition.id
+      );
+
+      saveCustomTransforms();
+      renderTransformOptions();
+      setStatus(`Deleted custom transform “${definition.name}”.`);
+    });
+
+    copyBtn.addEventListener("click", async () => {
+      if (!output.value) {
+        return;
+      }
+
+      try {
+        await navigator.clipboard.writeText(output.value);
+      } catch {
+        output.select();
+        document.execCommand("copy");
+      }
+
+      setStatus("Copied.");
+    });
+
+    clearBtn.addEventListener("click", () => {
+      input.value = "";
+      output.value = "";
+      setStatus("");
+      input.focus();
+    });
+
+    renderTransformOptions();
+    input.focus();
+  </script>
+</body>
+</html>
