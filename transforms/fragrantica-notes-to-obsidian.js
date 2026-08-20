@@ -4,24 +4,27 @@
 
     Expected Input format:
 
-    Top Notes
-    Pink Pepper
-    Pink Pepper
-    Mandarin
-    Mandarin
-    Middle Notes
-    Lavender
-    Lavender
-    Cinnamon
-    Cinnamon
-    Sage
-    Sage
-    Base Notes
-    Chestnut
-    Chestnut
-    Vanilla
-    Vanilla
-    Leather
+    Top Notes 
+    Elemi resin 
+    Elemi resin 
+    Pink Pepper 
+    Pink Pepper 
+    Middle Notes 
+    Cinnamon 
+    Cinnamon 
+    Lavender 
+    Lavender 
+    Clary Sage 
+    Clary Sage 
+    Base Notes 
+    Bourbon Vanilla 
+    Bourbon Vanilla 
+    Leather 
+    Leather 
+    Marron glacé
+    Marron glacé
+    Cedar 
+    Cedar
 
 
     Output format:
@@ -33,7 +36,7 @@
     ~~~ Base Notes ~~~
     Bourbon vanilla, Leather, Marron glacé, Cedar
   `.trim();
-  
+
   function normalizeLine(line) {
     return line.trim().replace(/\s+/g, " ");
   }
