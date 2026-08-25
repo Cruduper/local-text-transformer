@@ -111,6 +111,7 @@
   window.TextTransformer.registerBuiltIn({
     id: "fragrantica-notes-to-mercari",
     name: "Fragrantica Notes ⟶ Mercari",
+    helpText,
     transform
   });
 })();
