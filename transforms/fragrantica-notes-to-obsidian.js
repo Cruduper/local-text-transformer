@@ -87,6 +87,7 @@
   window.TextTransformer.registerBuiltIn({
     id: "fragrantica-frag-notes",
     name: "Fragrantica Notes ⟶ Obsidian",
+    helpText,
     transform
   });
 })();
